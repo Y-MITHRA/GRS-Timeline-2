@@ -266,4 +266,147 @@ router.get('/quick-stats', auth, async (req, res) => {
     }
 });
 
+// Helper function to standardize department names
+const standardizeDepartmentName = (department) => {
+    if (!department) return '';
+    // Convert to lowercase first
+    const normalized = department.toLowerCase();
+    // Handle special cases
+    if (normalized.includes('water')) return 'Water';
+    if (normalized.includes('rto')) return 'RTO';
+    if (normalized.includes('electricity')) return 'Electricity';
+    // For any other department, capitalize first letter of each word
+    return department.split(' ').map(word =>
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+};
+
+// Analytics Routes
+router.get('/response-time-stats', auth, async (req, res) => {
+    try {
+        const grievances = await Grievance.find({}).sort({ createdAt: 1 });
+        const departmentStats = {};
+
+        // Calculate average response time per department
+        grievances.forEach(grievance => {
+            const standardDepartment = standardizeDepartmentName(grievance.department);
+            if (!standardDepartment) return;
+
+            if (!departmentStats[standardDepartment]) {
+                departmentStats[standardDepartment] = {
+                    totalResponseTime: 0,
+                    count: 0
+                };
+            }
+
+            // Calculate response time only if both dates exist and are valid
+            if (grievance.createdAt && grievance.updatedAt) {
+                const createdDate = new Date(grievance.createdAt);
+                const updatedDate = new Date(grievance.updatedAt);
+
+                if (createdDate && updatedDate && !isNaN(createdDate) && !isNaN(updatedDate)) {
+                    const responseTime = (updatedDate - createdDate) / (1000 * 60 * 60); // Convert to hours
+                    if (responseTime >= 0) { // Only count positive response times
+                        departmentStats[standardDepartment].totalResponseTime += responseTime;
+                        departmentStats[standardDepartment].count += 1;
+                    }
+                }
+            }
+        });
+
+        const stats = Object.entries(departmentStats)
+            .filter(([department]) => department) // Filter out empty department names
+            .map(([department, data]) => ({
+                department,
+                averageResponseTime: data.count > 0 ? (data.totalResponseTime / data.count).toFixed(2) : '0'
+            }))
+            .sort((a, b) => a.department.localeCompare(b.department)); // Sort alphabetically
+
+        console.log('Response Time Stats:', stats); // Add logging for debugging
+        res.json({ stats });
+    } catch (error) {
+        console.error('Error fetching response time stats:', error);
+        res.status(500).json({ error: 'Failed to fetch response time statistics' });
+    }
+});
+
+router.get('/priority-distribution', auth, async (req, res) => {
+    try {
+        const grievances = await Grievance.find({});
+        const distribution = {
+            High: 0,
+            Medium: 0,
+            Low: 0
+        };
+
+        // Calculate priority distribution
+        grievances.forEach(grievance => {
+            const priority = grievance.priority ? grievance.priority.charAt(0).toUpperCase() + grievance.priority.slice(1).toLowerCase() : null;
+            if (priority && distribution.hasOwnProperty(priority)) {
+                distribution[priority]++;
+            }
+        });
+
+        const total = Object.values(distribution).reduce((a, b) => a + b, 0);
+        const distributionArray = Object.entries(distribution).map(([name, value]) => ({
+            name,
+            value,
+            percent: total > 0 ? value / total : 0
+        }));
+
+        res.json({ distribution: distributionArray });
+    } catch (error) {
+        console.error('Error fetching priority distribution:', error);
+        res.status(500).json({ error: 'Failed to fetch priority distribution' });
+    }
+});
+
+router.get('/department-efficiency', auth, async (req, res) => {
+    try {
+        const grievances = await Grievance.find({});
+        const departmentStats = {};
+
+        // Calculate efficiency metrics per department
+        grievances.forEach(grievance => {
+            const standardDepartment = standardizeDepartmentName(grievance.department);
+            if (!standardDepartment) return; // Skip if department is empty
+
+            if (!departmentStats[standardDepartment]) {
+                departmentStats[standardDepartment] = {
+                    total: 0,
+                    resolved: 0,
+                    responded: 0
+                };
+            }
+
+            departmentStats[standardDepartment].total++;
+
+            // Case-insensitive status check
+            const status = (grievance.status || '').toLowerCase();
+            if (status === 'resolved') {
+                departmentStats[standardDepartment].resolved++;
+            }
+
+            if (grievance.updatedAt) {
+                departmentStats[standardDepartment].responded++;
+            }
+        });
+
+        const efficiency = Object.entries(departmentStats)
+            .map(([department, data]) => ({
+                department,
+                score: data.total > 0 ? ((data.resolved / data.total) * 100).toFixed(2) : '0',
+                responseRate: data.total > 0 ? ((data.responded / data.total) * 100).toFixed(2) : '0',
+                resolutionRate: data.total > 0 ? ((data.resolved / data.total) * 100).toFixed(2) : '0'
+            }))
+            .sort((a, b) => a.department.localeCompare(b.department)); // Sort departments alphabetically
+
+        console.log('Department Efficiency:', efficiency); // Add logging for debugging
+        res.json({ efficiency });
+    } catch (error) {
+        console.error('Error fetching department efficiency:', error);
+        res.status(500).json({ error: 'Failed to fetch department efficiency' });
+    }
+});
+
 export default router;

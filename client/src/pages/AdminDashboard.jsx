@@ -3,12 +3,14 @@ import { useLocation } from "react-router-dom";
 import Footer from "../shared/Footer";
 import NavBar from "../components/NavBar";
 import AdminSidebar from '../components/AdminSidebar';
-import { Bar, BarChart, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from "recharts";
-import { Container, Row, Col, Card, Button, Table, Modal, Form } from "react-bootstrap";
-import { Bell, User, ChevronDown, Plus, MessageSquare, List, X, Database, AlertTriangle } from "lucide-react";
+import { Bar, BarChart, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid, PieChart, Pie, Cell } from "recharts";
+import { Container, Row, Col, Card, Button, Table, Modal, Form, Badge, Spinner } from "react-bootstrap";
+import { Bell, User, ChevronDown, Plus, MessageSquare, List, X, Database, AlertTriangle, RotateCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API_URL } from '../config';
 import toast from 'react-hot-toast';
+import SmartQuery from '../components/SmartQuery';
+import '../styles/SmartQuery.css';
 
 const AdminDashboard = () => {
     const location = useLocation();
@@ -41,6 +43,9 @@ const AdminDashboard = () => {
         resolvedCases: { value: 0, trend: '0%' },
         departments: { value: 0, trend: 'Stable' }
     });
+    const [responseTimeStats, setResponseTimeStats] = useState([]);
+    const [priorityDistribution, setPriorityDistribution] = useState([]);
+    const [departmentEfficiency, setDepartmentEfficiency] = useState([]);
 
     useEffect(() => {
         // Update activeTab when route changes
@@ -56,6 +61,7 @@ const AdminDashboard = () => {
             fetchResourceData();
             fetchDashboardStats();
             fetchQuickStats();
+            fetchAdditionalStats();
         } else if (activeTab === 'escalated') {
             fetchEscalatedGrievances();
             fetchOfficials();
@@ -224,6 +230,61 @@ const AdminDashboard = () => {
         } catch (error) {
             console.error('Error fetching quick statistics:', error);
             toast.error('Failed to load quick statistics');
+        }
+    };
+
+    const fetchAdditionalStats = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                throw new Error('No authentication token found');
+            }
+
+            // Fetch response time statistics
+            const responseTimeResponse = await fetch(`${API_URL}/admin/response-time-stats`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!responseTimeResponse.ok) {
+                throw new Error('Failed to fetch response time statistics');
+            }
+
+            const responseTimeData = await responseTimeResponse.json();
+            setResponseTimeStats(responseTimeData.stats);
+
+            // Fetch priority distribution
+            const priorityResponse = await fetch(`${API_URL}/admin/priority-distribution`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!priorityResponse.ok) {
+                throw new Error('Failed to fetch priority distribution');
+            }
+
+            const priorityData = await priorityResponse.json();
+            setPriorityDistribution(priorityData.distribution);
+
+            // Fetch department efficiency
+            const efficiencyResponse = await fetch(`${API_URL}/admin/department-efficiency`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!efficiencyResponse.ok) {
+                throw new Error('Failed to fetch department efficiency');
+            }
+
+            const efficiencyData = await efficiencyResponse.json();
+            setDepartmentEfficiency(efficiencyData.efficiency);
+
+        } catch (error) {
+            console.error('Error fetching additional statistics:', error);
+            toast.error('Failed to load additional statistics');
         }
     };
 
@@ -401,6 +462,112 @@ const AdminDashboard = () => {
         </Row>
     );
 
+    const renderAdditionalCharts = () => (
+        <>
+            <Row className="mb-4">
+                <Col md={6}>
+                    <Card className="p-3 shadow-sm h-100">
+                        <h6>Average Response Time by Department</h6>
+                        {dashboardLoading ? (
+                            <div className="text-center py-4">
+                                <Spinner animation="border" role="status">
+                                    <span className="visually-hidden">Loading...</span>
+                                </Spinner>
+                            </div>
+                        ) : dashboardError ? (
+                            <div className="alert alert-danger">{dashboardError}</div>
+                        ) : (
+                            <BarChart
+                                width={500}
+                                height={300}
+                                data={responseTimeStats}
+                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="department" />
+                                <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="averageResponseTime" fill="#8884d8" name="Avg Response Time (hrs)" />
+                            </BarChart>
+                        )}
+                    </Card>
+                </Col>
+                <Col md={6}>
+                    <Card className="p-3 shadow-sm h-100">
+                        <h6>Priority Distribution</h6>
+                        {dashboardLoading ? (
+                            <div className="text-center py-4">
+                                <Spinner animation="border" role="status">
+                                    <span className="visually-hidden">Loading...</span>
+                                </Spinner>
+                            </div>
+                        ) : dashboardError ? (
+                            <div className="alert alert-danger">{dashboardError}</div>
+                        ) : (
+                            <div className="d-flex justify-content-center">
+                                <PieChart width={400} height={300}>
+                                    <Pie
+                                        data={priorityDistribution}
+                                        cx={200}
+                                        cy={150}
+                                        labelLine={false}
+                                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                                        outerRadius={80}
+                                        fill="#8884d8"
+                                        dataKey="value"
+                                    >
+                                        {priorityDistribution.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={
+                                                entry.name === 'High' ? '#dc3545' :
+                                                    entry.name === 'Medium' ? '#ffc107' :
+                                                        '#28a745'
+                                            } />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                </PieChart>
+                            </div>
+                        )}
+                    </Card>
+                </Col>
+            </Row>
+            <Row className="mb-4">
+                <Col md={12}>
+                    <Card className="p-3 shadow-sm">
+                        <h6>Department Efficiency Score</h6>
+                        {dashboardLoading ? (
+                            <div className="text-center py-4">
+                                <Spinner animation="border" role="status">
+                                    <span className="visually-hidden">Loading...</span>
+                                </Spinner>
+                            </div>
+                        ) : dashboardError ? (
+                            <div className="alert alert-danger">{dashboardError}</div>
+                        ) : (
+                            <BarChart
+                                width={1000}
+                                height={300}
+                                data={departmentEfficiency}
+                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="department" />
+                                <YAxis label={{ value: 'Efficiency Score (%)', angle: -90, position: 'insideLeft' }} />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="score" fill="#20c997" name="Efficiency Score" />
+                                <Bar dataKey="responseRate" fill="#6610f2" name="Response Rate" />
+                                <Bar dataKey="resolutionRate" fill="#fd7e14" name="Resolution Rate" />
+                            </BarChart>
+                        )}
+                    </Card>
+                </Col>
+            </Row>
+        </>
+    );
+
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard':
@@ -435,27 +602,21 @@ const AdminDashboard = () => {
                                 <Card className="p-3 shadow-sm">
                                     <h6 className="text-muted">Total Cases</h6>
                                     <h4>{quickStats.totalCases.value}</h4>
-                                    <span className={`text-${quickStats.totalCases.trend.includes("+") ? "success" : "muted"}`}>
-                                        {quickStats.totalCases.trend}
-                                    </span>
+                                    <span className="text-muted">{quickStats.totalCases.trend}</span>
                                 </Card>
                             </Col>
                             <Col md={3}>
                                 <Card className="p-3 shadow-sm">
                                     <h6 className="text-muted">Active Cases</h6>
                                     <h4>{quickStats.activeCases.value}</h4>
-                                    <span className={`text-${quickStats.activeCases.trend.includes("+") ? "warning" : "muted"}`}>
-                                        {quickStats.activeCases.trend}
-                                    </span>
+                                    <span className="text-muted">{quickStats.activeCases.trend}</span>
                                 </Card>
                             </Col>
                             <Col md={3}>
                                 <Card className="p-3 shadow-sm">
-                                    <h6 className="text-muted">Cases Resolved</h6>
+                                    <h6 className="text-muted">Resolved Cases</h6>
                                     <h4>{quickStats.resolvedCases.value}</h4>
-                                    <span className={`text-${quickStats.resolvedCases.trend.includes("+") ? "success" : "muted"}`}>
-                                        {quickStats.resolvedCases.trend}
-                                    </span>
+                                    <span className="text-muted">{quickStats.resolvedCases.trend}</span>
                                 </Card>
                             </Col>
                             <Col md={3}>
@@ -470,67 +631,15 @@ const AdminDashboard = () => {
                         {/* Charts */}
                         {renderDashboardCharts()}
 
-                        {/* Resource Management Section */}
-                        <Card className="shadow-sm mt-4">
-                            <Card.Header>
-                                <h6>Department Resource Management</h6>
-                            </Card.Header>
-                            <Card.Body>
-                                {resourceLoading ? (
-                                    <div className="text-center">Loading resource data...</div>
-                                ) : resourceError ? (
-                                    <div className="text-danger">{resourceError}</div>
-                                ) : (
-                                    <Table responsive>
-                                        <thead>
-                                            <tr>
-                                                <th>Department</th>
-                                                <th>Grievance ID</th>
-                                                <th>Taluk</th>
-                                                <th>Division</th>
-                                                <th>District</th>
-                                                <th>Start Date</th>
-                                                <th>End Date</th>
-                                                <th>Requirements</th>
-                                                <th>Funds Required</th>
-                                                <th>Resources</th>
-                                                <th>Manpower</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {resourceData.map((resource) => (
-                                                <tr key={resource._id}>
-                                                    <td>{resource.department}</td>
-                                                    <td>{resource.petitionId}</td>
-                                                    <td>{resource.taluk || 'N/A'}</td>
-                                                    <td>{resource.division || 'N/A'}</td>
-                                                    <td>{resource.district || 'N/A'}</td>
-                                                    <td>{new Date(resource.startDate).toLocaleDateString()}</td>
-                                                    <td>{new Date(resource.endDate).toLocaleDateString()}</td>
-                                                    <td>{resource.requirementsNeeded}</td>
-                                                    <td>₹{resource.fundsRequired.toLocaleString()}</td>
-                                                    <td>{resource.resourcesRequired}</td>
-                                                    <td>{resource.manpowerNeeded}</td>
-                                                    <td>
-                                                        <span className={`badge bg-${getStatusBadgeClass(resource.status)}`}>
-                                                            {resource.status}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </Table>
-                                )}
-                            </Card.Body>
-                        </Card>
+                        {/* New Analytics Charts */}
+                        {renderAdditionalCharts()}
                     </>
                 );
             case 'escalated':
                 return (
                     <Card className="shadow-sm">
                         <Card.Header className="d-flex justify-content-between align-items-center">
-                            <h6 className="mb-0">Escalated Grievances</h6>
+                            <h5 className="mb-0">Escalated Grievances</h5>
                             <Button
                                 variant="outline-primary"
                                 size="sm"
@@ -538,31 +647,24 @@ const AdminDashboard = () => {
                                 disabled={escalatedLoading}
                             >
                                 {escalatedLoading ? (
-                                    <>
-                                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                        Loading...
-                                    </>
+                                    <Spinner animation="border" size="sm" />
                                 ) : (
-                                    <>Refresh</>
+                                    <>
+                                        <RotateCw size={14} className="me-1" />
+                                        Refresh
+                                    </>
                                 )}
                             </Button>
                         </Card.Header>
                         <Card.Body>
-                            {escalatedError ? (
-                                <div className="alert alert-danger" role="alert">
-                                    <AlertTriangle size={18} className="me-2" />
-                                    {escalatedError}
-                                </div>
-                            ) : escalatedLoading ? (
+                            {escalatedLoading ? (
                                 <div className="text-center py-4">
-                                    <div className="spinner-border text-primary" role="status">
+                                    <Spinner animation="border" role="status">
                                         <span className="visually-hidden">Loading...</span>
-                                    </div>
+                                    </Spinner>
                                 </div>
-                            ) : escalatedGrievances.length === 0 ? (
-                                <div className="text-center py-4 text-muted">
-                                    No escalated grievances found
-                                </div>
+                            ) : escalatedError ? (
+                                <div className="alert alert-danger">{escalatedError}</div>
                             ) : (
                                 <Table responsive>
                                     <thead>
@@ -570,61 +672,38 @@ const AdminDashboard = () => {
                                             <th>Grievance ID</th>
                                             <th>Title</th>
                                             <th>Department</th>
-                                            <th>Taluk</th>
-                                            <th>Division</th>
-                                            <th>District</th>
                                             <th>Status</th>
                                             <th>Priority</th>
                                             <th>Assigned Official</th>
                                             <th>Created At</th>
                                             <th>Escalated At</th>
-                                            <th>Days Since Escalation</th>
-                                            <th>Escalation Reason</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {escalatedGrievances.map((grievance) => (
                                             <tr key={grievance._id}>
-                                                <td>{grievance.petitionId || 'N/A'}</td>
+                                                <td>{grievance.petitionId || grievance.grievanceId || 'N/A'}</td>
+                                                <td>{grievance.title}</td>
+                                                <td>{grievance.department}</td>
                                                 <td>
-                                                    <div className="text-truncate" style={{ maxWidth: '200px' }} title={grievance.title}>
-                                                        {grievance.title || 'No Title'}
-                                                    </div>
-                                                </td>
-                                                <td>{grievance.department || 'Unassigned'}</td>
-                                                <td>{grievance.taluk || 'N/A'}</td>
-                                                <td>{grievance.division || 'N/A'}</td>
-                                                <td>{grievance.district || 'N/A'}</td>
-                                                <td>
-                                                    <span className={`badge bg-${getStatusBadgeClass(grievance.status)}`}>
-                                                        {grievance.status ? grievance.status.charAt(0).toUpperCase() + grievance.status.slice(1) : 'Unknown'}
-                                                    </span>
+                                                    <Badge bg={grievance.status === 'Resolved' ? 'success' : 'warning'}>
+                                                        {grievance.status}
+                                                    </Badge>
                                                 </td>
                                                 <td>
-                                                    <span className={`badge bg-${getPriorityBadgeClass(grievance.priority)}`}>
-                                                        {grievance.priority ? grievance.priority.charAt(0).toUpperCase() + grievance.priority.slice(1).toLowerCase() : 'Not Set'}
-                                                    </span>
+                                                    <Badge bg={grievance.priority === 'High' ? 'danger' : 'warning'}>
+                                                        {grievance.priority}
+                                                    </Badge>
                                                 </td>
                                                 <td>
                                                     {grievance.assignedTo ?
-                                                        `${grievance.assignedTo.firstName || ''} ${grievance.assignedTo.lastName || ''}`.trim() || 'Unnamed' :
-                                                        'Unassigned'
+                                                        `${grievance.assignedTo.firstName || ''} ${grievance.assignedTo.lastName || ''}`.trim() || 'Unnamed'
+                                                        : 'Unassigned'
                                                     }
                                                 </td>
-                                                <td>{grievance.createdAt ? new Date(grievance.createdAt).toLocaleDateString() : 'N/A'}</td>
-                                                <td>{grievance.escalatedAt ? new Date(grievance.escalatedAt).toLocaleDateString() : 'N/A'}</td>
-                                                <td>
-                                                    {grievance.escalatedAt ?
-                                                        Math.floor((new Date() - new Date(grievance.escalatedAt)) / (1000 * 60 * 60 * 24)) :
-                                                        'N/A'
-                                                    }
-                                                </td>
-                                                <td>
-                                                    <div className="text-truncate" style={{ maxWidth: '200px' }} title={grievance.escalationReason}>
-                                                        {grievance.escalationReason || 'No reason provided'}
-                                                    </div>
-                                                </td>
+                                                <td>{new Date(grievance.createdAt).toLocaleDateString()}</td>
+                                                <td>{new Date(grievance.escalatedAt).toLocaleDateString()}</td>
                                                 <td>
                                                     <Button
                                                         variant={grievance.escalationResponse ? "success" : "primary"}
@@ -643,6 +722,90 @@ const AdminDashboard = () => {
                         </Card.Body>
                     </Card>
                 );
+            case 'resource':
+                return (
+                    <Card className="shadow-sm">
+                        <Card.Header>
+                            <h5>Resource Management</h5>
+                        </Card.Header>
+                        <Card.Body>
+                            {resourceLoading ? (
+                                <div className="text-center py-4">
+                                    <Spinner animation="border" role="status">
+                                        <span className="visually-hidden">Loading...</span>
+                                    </Spinner>
+                                </div>
+                            ) : resourceError ? (
+                                <div className="alert alert-danger">{resourceError}</div>
+                            ) : (
+                                <Table responsive>
+                                    <thead>
+                                        <tr>
+                                            <th>Department</th>
+                                            <th>Resources</th>
+                                            <th>Status</th>
+                                            <th>Last Updated</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {resourceData.map((resource) => (
+                                            <tr key={resource._id}>
+                                                <td>{resource.department}</td>
+                                                <td>{resource.resources}</td>
+                                                <td>
+                                                    <Badge bg={resource.status === 'Active' ? 'success' : 'warning'}>
+                                                        {resource.status}
+                                                    </Badge>
+                                                </td>
+                                                <td>{new Date(resource.updatedAt).toLocaleDateString()}</td>
+                                                <td>
+                                                    <Button variant="primary" size="sm" className="me-2">
+                                                        Edit
+                                                    </Button>
+                                                    <Button variant="danger" size="sm">
+                                                        Delete
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </Table>
+                            )}
+                        </Card.Body>
+                    </Card>
+                );
+            case 'settings':
+                return (
+                    <Card className="shadow-sm">
+                        <Card.Header>
+                            <h5>Settings</h5>
+                        </Card.Header>
+                        <Card.Body>
+                            <Form>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Email Notifications</Form.Label>
+                                    <Form.Check
+                                        type="switch"
+                                        id="email-notifications"
+                                        label="Receive email notifications"
+                                    />
+                                </Form.Group>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>System Preferences</Form.Label>
+                                    <Form.Check
+                                        type="switch"
+                                        id="dark-mode"
+                                        label="Dark Mode"
+                                    />
+                                </Form.Group>
+                                <Button variant="primary">Save Changes</Button>
+                            </Form>
+                        </Card.Body>
+                    </Card>
+                );
+            case 'smart-query':
+                return <SmartQuery />;
             default:
                 return null;
         }

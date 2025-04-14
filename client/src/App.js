@@ -82,6 +82,7 @@ function App() {
             <Route path="/admin/escalated" element={<AdminDashboard />} />
             <Route path="/admin/resource-management" element={<ResourceManagement />} />
             <Route path="/admin/settings" element={<Settings />} />
+            <Route path="/admin/smart-query" element={<AdminDashboard />} />
           </Route>
 
           {/* Protected Official Routes */}

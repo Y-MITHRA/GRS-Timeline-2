@@ -5,7 +5,8 @@ import dotenv from 'dotenv';
 import grievanceRoutes from './routes/grievanceRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import officialRoutes from './routes/officialRoutes.js';
-import notificationRoutes from './routes/notificationRoutes.js';
+import notificationsRouter from './routes/notifications.js';
+import smartQueryRouter from './routes/smartQuery.js';
 
 dotenv.config();
 
@@ -19,7 +20,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/grievances', grievanceRoutes);
 app.use('/api/officials', officialRoutes);
-app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/smart-query', smartQueryRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
